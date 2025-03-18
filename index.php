@@ -1,30 +1,40 @@
 <?php
 session_start();
 
+// Include database connection
+include 'db_connection.php';
+
+// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    include 'db_connection.php'; // Certifique-se de que este arquivo configura a conexão com o PostgreSQL
-    $utilizador = $_POST['username'];
-    $senha = $_POST['password'];
+    $utilizador = htmlspecialchars($_POST['username']); // Sanitize input
+    $senha = $_POST['password']; // Password doesn't need htmlspecialchars
 
     if (!empty($utilizador) && !empty($senha)) {
-        // Verifica se já existe mais de um admin
+        // Check if there is more than one admin
         $adminCheck = pg_query($conn, "SELECT COUNT(*) AS admin_count FROM utilizadores WHERE user_type = 'admin'");
-        $adminData = pg_fetch_assoc($adminCheck);
+        if (!$adminCheck) {
+            die("Erro ao verificar administradores: " . pg_last_error($conn));
+        }
 
+        $adminData = pg_fetch_assoc($adminCheck);
         if ($adminData['admin_count'] > 1) {
             echo '<h3>Não pode haver mais que um admin!</h3>';
         } else {
-            // Busca os dados do utilizador no PostgreSQL
+            // Fetch user data using prepared statements
             $query = "SELECT * FROM utilizadores WHERE user_name = $1";
             $result = pg_query_params($conn, $query, array($utilizador));
 
             if ($result && pg_num_rows($result) > 0) {
                 $row = pg_fetch_assoc($result);
                 if (password_verify($senha, $row['senha'])) {
+                    // Regenerate session ID for security
+                    session_regenerate_id(true);
+
+                    // Set session variables
                     $_SESSION['username'] = $row['user_name'];
                     $_SESSION['id'] = $row['id'];
 
-                    // Redireciona com base no tipo de utilizador
+                    // Redirect based on user type
                     if ($row['user_type'] == 'admin') {
                         header('Location: pag_admin.php');
                     } else {
@@ -39,10 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } else {
-        echo 'Por favor, preencha todos os campos!';
+        echo '<h3>Por favor, preencha todos os campos!</h3>';
     }
 
-    pg_close($conn); // Fecha a conexão com o PostgreSQL
+    pg_close($conn); // Close the database connection
 }
 ?>
 <!DOCTYPE html>
